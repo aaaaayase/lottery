@@ -21,7 +21,7 @@ public class RedisUtil {
     /**
      * StringRedisTemplate继承RedisTemplate<String, String>，两种的区别仅仅是序列化
      * ⽅式不⼀样。
-     * 这⾥选⽤StringRedisTemplate，能够避免乱码问题。
+     * 这⾥选⽤StringRedisTemplate，能够避免乱码问题。 直接存放的就是string 可读的
      */
     @Autowired
     private StringRedisTemplate stringRedisTemplate;

@@ -7,19 +7,27 @@ import com.yun.lottery.common.utils.JacksonUtil;
 import com.yun.lottery.controller.param.ShortMessageLoginParam;
 import com.yun.lottery.controller.param.UserPasswordLoginParam;
 import com.yun.lottery.controller.param.UserRegisterParam;
+import com.yun.lottery.controller.result.BaseUserInfoResult;
 import com.yun.lottery.controller.result.UserLoginResult;
 import com.yun.lottery.controller.result.UserRegisterResult;
 import com.yun.lottery.service.UserService;
 import com.yun.lottery.service.VerificationCodeService;
+import com.yun.lottery.service.dto.UserDTO;
 import com.yun.lottery.service.dto.UserLoginDTO;
 import com.yun.lottery.service.dto.UserRegisterDTO;
+import com.yun.lottery.service.enums.UserIdentityEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.CollectionUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author yun
@@ -114,6 +122,30 @@ public class UserController {
 
         result.setUserId(userRegisterDTO.getUserId());
         return result;
+    }
+
+    @RequestMapping("/base-user/find-list")
+    public CommonResult<List<BaseUserInfoResult>> findBaseUserInfo(String identity) {
+        log.info("findBaseUserInfo identity:{}", identity);
+        List<UserDTO> userDTOList = userService.findUserInfo(
+                UserIdentityEnum.forName(identity));
+        return CommonResult.success(convertToList(userDTOList));
+    }
+
+    private List<BaseUserInfoResult> convertToList(List<UserDTO> userDTOList) {
+        if (CollectionUtils.isEmpty(userDTOList)) {
+            return Arrays.asList();
+        }
+
+        return userDTOList.stream()
+                .map(userDTO -> {
+                    BaseUserInfoResult result = new BaseUserInfoResult();
+                    result.setUserId(userDTO.getUserId());
+                    result.setUserName(userDTO.getUserName());
+                    result.setIdentity(userDTO.getIdentity().name());
+                    return result;
+                }).collect(Collectors.toList());
+
     }
 
 }

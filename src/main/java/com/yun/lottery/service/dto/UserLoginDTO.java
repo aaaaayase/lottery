@@ -1,5 +1,6 @@
 package com.yun.lottery.service.dto;
 
+import com.yun.lottery.service.enums.UserIdentityEnum;
 import lombok.Data;
 
 /**
@@ -12,5 +13,5 @@ public class UserLoginDTO {
 
     private String token;
 
-    private String identity;
+    private UserIdentityEnum identity;
 }

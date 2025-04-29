@@ -30,6 +30,7 @@ public interface ServiceErrorCodeConstants {
     ErrorCode ACTIVITY_STATUS_CONVERT_ERROR = new ErrorCode(205, "活动相关状态转换失败");
     ErrorCode CACHE_ACTIVITY_ID_IS_EMPTY = new ErrorCode(206, "缓存活动的活动id为空");
     ErrorCode CACHE_ACTIVITY_ID_ERROR = new ErrorCode(207, "缓存活动的活动id有误");
+    ErrorCode ACTIVITY_PRIZE_TIERS_ERROR = new ErrorCode(208, "活动的奖品等级有误");
 
     // --------奖品模块错误吗
 

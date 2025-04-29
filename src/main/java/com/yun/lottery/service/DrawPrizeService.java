@@ -1,7 +1,12 @@
 package com.yun.lottery.service;
 
 import com.yun.lottery.controller.param.DrawPrizeParam;
+import com.yun.lottery.controller.param.ShowWinningRecordsParam;
+import com.yun.lottery.dao.dataobject.WinningRecordDO;
+import com.yun.lottery.service.dto.WinningRecordDTO;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * @author yun

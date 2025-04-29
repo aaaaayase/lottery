@@ -3,7 +3,10 @@ package com.yun.lottery.controller;
 import com.yun.lottery.common.pojo.CommonResult;
 import com.yun.lottery.common.utils.JacksonUtil;
 import com.yun.lottery.controller.param.DrawPrizeParam;
+import com.yun.lottery.controller.param.ShowWinningRecordsParam;
+import com.yun.lottery.controller.result.WinningRecordResult;
 import com.yun.lottery.service.DrawPrizeService;
+import com.yun.lottery.service.dto.WinningRecordDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.CollectionUtils;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**

@@ -14,7 +14,9 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
+
 public class MailUtil {
+
     @Value(value = "${spring.mail.username}")
     private String from;
     @Autowired
@@ -23,7 +25,7 @@ public class MailUtil {
     /**
      * 发邮件
      *
-     * @param to:  目标邮箱地址
+     * @param to:      目标邮箱地址
      * @param subject： 标题
      * @param context： 正文
      * @return

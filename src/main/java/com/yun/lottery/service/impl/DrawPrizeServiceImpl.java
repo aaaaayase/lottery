@@ -5,9 +5,11 @@ import com.yun.lottery.common.errorcode.ServiceErrorCodeConstants;
 import com.yun.lottery.common.utils.JacksonUtil;
 import com.yun.lottery.common.utils.RedisUtil;
 import com.yun.lottery.controller.param.DrawPrizeParam;
+import com.yun.lottery.controller.param.ShowWinningRecordsParam;
 import com.yun.lottery.dao.dataobject.*;
 import com.yun.lottery.dao.mapper.*;
 import com.yun.lottery.service.DrawPrizeService;
+import com.yun.lottery.service.dto.WinningRecordDTO;
 import com.yun.lottery.service.enums.ActivityPrizeStatusEnum;
 import com.yun.lottery.service.enums.ActivityPrizeTiersEnum;
 import com.yun.lottery.service.enums.ActivityStatusEnum;
@@ -195,7 +197,7 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
                 param.getActivityId(), param.getPrizeId());
         // 存放记录到redis
         if (CollectionUtils.isEmpty(winningRecordDOList)) {
-            logger.info("查询的中奖记录为空！param:{}",
+            log.info("查询的中奖记录为空！param:{}",
                     JacksonUtil.writeValueAsString(param));
             return Arrays.asList();
         }
@@ -262,7 +264,7 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
                     str,
                     time);
         } catch (Exception e) {
-            logger.error("缓存中奖记录异常！key:{}, value:{}", WINNING_RECORDS_PREFIX + key, str);
+            log.error("缓存中奖记录异常！key:{}, value:{}", WINNING_RECORDS_PREFIX + key, str);
         }
 
     }
@@ -279,7 +281,7 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
                 log.warn("要从缓存中查询中奖记录的key为空！");
                 return Arrays.asList();
             }
-            String str = redisUtil.get(WINNING_RECORDS_PREFIX + key);
+            String str = (String) redisUtil.get(WINNING_RECORDS_PREFIX + key);
             if (!StringUtils.hasText(str)) {
                 return Arrays.asList();
             }

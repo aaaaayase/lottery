@@ -1,14 +1,16 @@
 package com.yun.lottery.service.mq;
 
 import cn.hutool.core.date.DateUtil;
-import cn.hutool.extra.mail.MailUtil;
+
 import com.yun.lottery.common.exception.ServiceException;
 import com.yun.lottery.common.utils.JacksonUtil;
+import com.yun.lottery.common.utils.MailUtil;
 import com.yun.lottery.common.utils.SMSUtil;
 import com.yun.lottery.controller.param.DrawPrizeParam;
 import com.yun.lottery.dao.dataobject.ActivityPrizeDO;
 import com.yun.lottery.dao.dataobject.WinningRecordDO;
 import com.yun.lottery.dao.mapper.ActivityPrizeMapper;
+import com.yun.lottery.dao.mapper.WinningRecordMapper;
 import com.yun.lottery.service.DrawPrizeService;
 import com.yun.lottery.service.activitystatus.ActivityStatusManager;
 import com.yun.lottery.service.dto.ConvertActivityStatusDTO;
@@ -20,11 +22,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -44,6 +48,7 @@ public class MqReceiver {
     private DrawPrizeService drawPrizeService;
     @Autowired
     private ActivityStatusManager activityStatusManager;
+    @Qualifier("asyncServiceExecutor")
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
     @Autowired
@@ -190,9 +195,9 @@ public class MqReceiver {
         // 通过线程池 threadPoolTaskExecutor
         // 扩展：加入策略模式或者其他设计模式来完成后续的异步操作
         // 短信通知
-        threadPoolTaskExecutor.execute(()->sendMessage(winningRecordDOList));
+        threadPoolTaskExecutor.execute(() -> sendMessage(winningRecordDOList));
         // 邮件通知
-        threadPoolTaskExecutor.execute(()->sendMail(winningRecordDOList));
+        threadPoolTaskExecutor.execute(() -> sendMail(winningRecordDOList));
     }
 
     /**

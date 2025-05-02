@@ -65,6 +65,52 @@ public class UserServiceImpl implements UserService {
         return userRegisterDTO;
     }
 
+    private void checkRegisterInfo(UserRegisterParam param) {
+        if (param == null) {
+            throw new ServiceException(ServiceErrorCodeConstants.REGISTER_INFO_IS_EMPTY);
+        }
+        // 校验邮箱格式
+        if (!RegexUtil.checkMail(param.getMail())) {
+            throw new ServiceException(ServiceErrorCodeConstants.MAIL_ERROR);
+        }
+        // 校验手机号格式
+        if (!RegexUtil.checkMobile(param.getPhoneNumber())) {
+            throw new ServiceException(ServiceErrorCodeConstants.PHONE_NUMBER_ERROR);
+        }
+        // 校验身份信息
+        if (UserIdentityEnum.forName(param.getIdentity()) == null) {
+            throw new ServiceException(ServiceErrorCodeConstants.IDENTITY_ERROR);
+        }
+        // 校验管理员密码必填
+        if (param.getIdentity().equalsIgnoreCase(UserIdentityEnum.ADMIN.name()) && !StringUtils.hasText(param.getPassword())) {
+            throw new ServiceException(ServiceErrorCodeConstants.PASSWORD_IS_EMPTY);
+        }
+        // 密码校验 至少6位
+        if (StringUtils.hasText(param.getPassword()) && !RegexUtil.checkPassword(param.getPassword())) {
+            throw new ServiceException(ServiceErrorCodeConstants.PASSWORD_ERROR);
+        }
+        // 校验邮箱是否被使用
+        if (checkMailUsed(param.getMail())) {
+            throw new ServiceException(ServiceErrorCodeConstants.MAIL_USED);
+        }
+        // 校验手机号是否被使用
+        if (checkPhoneNumberUser(param.getPhoneNumber())) {
+            throw new ServiceException(ServiceErrorCodeConstants.PHONE_NUMBER_USED);
+        }
+
+    }
+
+    private boolean checkPhoneNumberUser(String phoneNumber) {
+        int count = userMapper.countByPhone(new Encrypt(phoneNumber));
+        return count > 0;
+    }
+
+    private boolean checkMailUsed(String mail) {
+        int count = userMapper.countByMail(mail);
+        return count > 0;
+
+    }
+
     @Override
     public UserLoginDTO login(UserLoginParam param) {
         UserLoginDTO userLoginDTO;
@@ -193,49 +239,5 @@ public class UserServiceImpl implements UserService {
         return userDTOList;
     }
 
-    private void checkRegisterInfo(UserRegisterParam param) {
-        if (param == null) {
-            throw new ServiceException(ServiceErrorCodeConstants.REGISTER_INFO_IS_EMPTY);
-        }
-        // 校验邮箱格式
-        if (!RegexUtil.checkMail(param.getMail())) {
-            throw new ServiceException(ServiceErrorCodeConstants.MAIL_ERROR);
-        }
-        // 校验手机号格式
-        if (!RegexUtil.checkMobile(param.getPhoneNumber())) {
-            throw new ServiceException(ServiceErrorCodeConstants.PHONE_NUMBER_ERROR);
-        }
-        // 校验身份信息
-        if (UserIdentityEnum.forName(param.getIdentity()) == null) {
-            throw new ServiceException(ServiceErrorCodeConstants.IDENTITY_ERROR);
-        }
-        // 校验管理员密码必填
-        if (param.getIdentity().equalsIgnoreCase(UserIdentityEnum.ADMIN.name()) && !StringUtils.hasText(param.getPassword())) {
-            throw new ServiceException(ServiceErrorCodeConstants.PASSWORD_IS_EMPTY);
-        }
-        // 密码校验 至少6位
-        if (StringUtils.hasText(param.getPassword()) && !RegexUtil.checkPassword(param.getPassword())) {
-            throw new ServiceException(ServiceErrorCodeConstants.PASSWORD_ERROR);
-        }
-        // 校验邮箱是否被使用
-        if (checkMailUsed(param.getMail())) {
-            throw new ServiceException(ServiceErrorCodeConstants.MAIL_USED);
-        }
-        // 校验手机号是否被使用
-        if (checkPhoneNumberUser(param.getPhoneNumber())) {
-            throw new ServiceException(ServiceErrorCodeConstants.PHONE_NUMBER_USED);
-        }
 
-    }
-
-    private boolean checkPhoneNumberUser(String phoneNumber) {
-        int count = userMapper.countByPhone(new Encrypt(phoneNumber));
-        return count > 0;
-    }
-
-    private boolean checkMailUsed(String mail) {
-        int count = userMapper.countByMail(mail);
-        return count > 0;
-
-    }
 }

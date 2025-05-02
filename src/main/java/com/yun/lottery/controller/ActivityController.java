@@ -62,7 +62,26 @@ public class ActivityController {
                 convertToFindActivityListResult(
                         activityService.findActivityList(param)));
     }
-
+    private FindActivityListResult convertToFindActivityListResult(PageListDTO<ActivityDTO> activityList) {
+        if (null == activityList) {
+            throw new ControllerException(ControllerErrorCodeConstants.FIND_ACTIVITY_LIST_ERROR);
+        }
+        FindActivityListResult result = new FindActivityListResult();
+        result.setTotal(activityList.getTotal());
+        result.setRecords(
+                activityList.getRecords()
+                        .stream()
+                        .map(activityDTO -> {
+                            FindActivityListResult.ActivityInfo activityInfo = new FindActivityListResult.ActivityInfo();
+                            activityInfo.setActivityId(activityDTO.getActivityId());
+                            activityInfo.setActivityName(activityDTO.getActivityName());
+                            activityInfo.setDescription(activityDTO.getDescription());
+                            activityInfo.setValid(activityDTO.valid());
+                            return activityInfo;
+                        }).collect(Collectors.toList())
+        );
+        return result;
+    }
     @RequestMapping("/activity-detail/find")
     public CommonResult<GetActivityDetailResult> getActivityDetail(Long activityId) {
         log.info("getActivityDetail activityId:{}", activityId);
@@ -110,26 +129,7 @@ public class ActivityController {
         return result;
     }
 
-    private FindActivityListResult convertToFindActivityListResult(PageListDTO<ActivityDTO> activityList) {
-        if (null == activityList) {
-            throw new ControllerException(ControllerErrorCodeConstants.FIND_ACTIVITY_LIST_ERROR);
-        }
-        FindActivityListResult result = new FindActivityListResult();
-        result.setTotal(activityList.getTotal());
-        result.setRecords(
-                activityList.getRecords()
-                        .stream()
-                        .map(activityDTO -> {
-                            FindActivityListResult.ActivityInfo activityInfo = new FindActivityListResult.ActivityInfo();
-                            activityInfo.setActivityId(activityDTO.getActivityId());
-                            activityInfo.setActivityName(activityDTO.getActivityName());
-                            activityInfo.setDescription(activityDTO.getDescription());
-                            activityInfo.setValid(activityDTO.valid());
-                            return activityInfo;
-                        }).collect(Collectors.toList())
-        );
-        return result;
-    }
+
 
     private CreateActivityResult convertToCreateActivityResult(CreateActivityDTO createActivityDTO) {
         if (null == createActivityDTO) {

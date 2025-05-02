@@ -58,6 +58,15 @@ public class UserController {
         return CommonResult.success(convertToUserRegisterResult(userRegisterDTO));
     }
 
+    private UserRegisterResult convertToUserRegisterResult(UserRegisterDTO userRegisterDTO) {
+        UserRegisterResult result = new UserRegisterResult();
+        if (userRegisterDTO == null) {
+            throw new ControllerException(ControllerErrorCodeConstants.REGISTER_ERROR);
+        }
+
+        result.setUserId(userRegisterDTO.getUserId());
+        return result;
+    }
     /**
      * 发送验证码
      *
@@ -112,16 +121,6 @@ public class UserController {
         UserLoginDTO userLoginDTO = userService.login(param);
         return CommonResult.success(convertToUserLoginResult(userLoginDTO));
 
-    }
-
-    private UserRegisterResult convertToUserRegisterResult(UserRegisterDTO userRegisterDTO) {
-        UserRegisterResult result = new UserRegisterResult();
-        if (userRegisterDTO == null) {
-            throw new ControllerException(ControllerErrorCodeConstants.REGISTER_ERROR);
-        }
-
-        result.setUserId(userRegisterDTO.getUserId());
-        return result;
     }
 
     @RequestMapping("/base-user/find-list")

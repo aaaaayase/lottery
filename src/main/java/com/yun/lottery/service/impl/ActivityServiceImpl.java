@@ -125,7 +125,146 @@ public class ActivityServiceImpl implements ActivityService {
         createActivityDTO.setActivityId(activityDO.getId());
         return createActivityDTO;
     }
+    /**
+     * 校验活动有效性
+     *
+     * @param param
+     */
+    private void checkActivityInfo(CreateActivityParam param) {
+        if (null == param) {
+            throw new ServiceException(ServiceErrorCodeConstants.CREATE_ACTIVITY_INFO_IS_EMPTY);
+        }
 
+        // 人员id在人员表中是否存在
+        // 1 2 3  ->  1 2
+        List<Long> userIds = param.getActivityUserList()
+                .stream()
+                .map(CreateUserByActivityParam::getUserId)
+                .distinct()
+                .collect(Collectors.toList());
+        List<Long> existUserIds = userMapper.selectExistByIds(userIds);
+        if (CollectionUtils.isEmpty(existUserIds)) {
+            throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_USER_ERROR);
+        }
+        userIds.forEach(id -> {
+            if (!existUserIds.contains(id)) {
+                throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_USER_ERROR);
+            }
+        });
+
+        // 奖品id在奖品表中是否存在
+        List<Long> prizeIds = param.getActivityPrizeList()
+                .stream()
+                .map(CreatePrizeByActivityParam::getPrizeId)
+                .distinct()
+                .collect(Collectors.toList());
+        List<Long> existPrizeIds = prizeMapper.selectExistByIds(prizeIds);
+        if (CollectionUtils.isEmpty(existPrizeIds)) {
+            throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_PRIZE_ERROR);
+        }
+        prizeIds.forEach(id -> {
+            if (!existPrizeIds.contains(id)) {
+                throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_PRIZE_ERROR);
+            }
+        });
+
+        // 人员数量大于等于奖品数量
+        // 2个奖品 2 1
+        int userAmount = param.getActivityUserList().size();
+        long prizeAmount = param.getActivityPrizeList()
+                .stream()
+                .mapToLong(CreatePrizeByActivityParam::getPrizeAmount) // 2 1
+                .sum();
+        if (userAmount < prizeAmount) {
+            throw new ServiceException(ServiceErrorCodeConstants.USER_PRIZE_AMOUNT_ERROR);
+        }
+
+        // 校验活动奖品等奖有效性
+        param.getActivityPrizeList().forEach(prize -> {
+            if (null == ActivityPrizeTiersEnum.forName(prize.getPrizeTiers())) {
+                throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_PRIZE_TIERS_ERROR);
+            }
+        });
+
+    }
+
+    /**
+     * 缓存完整的活动信息 ActivityDetailDTO
+     *
+     * @param detailDTO
+     */
+    private void cacheActivity(ActivityDetailDTO detailDTO) {
+        // key: ACTIVITY_12
+        // value: ActivityDetailDTO(json)
+        if (null == detailDTO || null == detailDTO.getActivityId()) {
+            log.warn("要缓存的活动信息不存在!");
+            return;
+        }
+
+        try {
+            redisUtil.set(ACTIVITY_PREFIX + detailDTO.getActivityId(),
+                    JacksonUtil.writeValueAsString(detailDTO),
+                    ACTIVITY_TIMEOUT);
+        } catch (Exception e) {
+            log.error("缓存活动异常，ActivityDetailDTO={}",
+                    JacksonUtil.writeValueAsString(detailDTO),
+                    e);
+        }
+    }
+    /**
+     * 根据基本DO整合完整的活动信息ActivityDetailDTO
+     *
+     * @param activityDO
+     * @param activityUserDOList
+     * @param prizeDOList
+     * @param activityPrizeDOList
+     * @return
+     */
+    private ActivityDetailDTO convertToActivityDetailDTO(ActivityDO activityDO,
+                                                         List<ActivityUserDO> activityUserDOList,
+                                                         List<PrizeDO> prizeDOList,
+                                                         List<ActivityPrizeDO> activityPrizeDOList) {
+        ActivityDetailDTO detailDTO = new ActivityDetailDTO();
+        detailDTO.setActivityId(activityDO.getId());
+        detailDTO.setActivityName(activityDO.getActivityName());
+        detailDTO.setDesc(activityDO.getDescription());
+        detailDTO.setStatus(ActivityStatusEnum.forName(activityDO.getStatus()));
+
+        // apDO: {prizeId，amount, status}, {prizeId，amount, status}
+        // pDO: {prizeid, name....},{prizeid, name....},{prizeid, name....}
+        List<ActivityDetailDTO.PrizeDTO> prizeDTOList = activityPrizeDOList
+                .stream()
+                .map(apDO -> {
+                    ActivityDetailDTO.PrizeDTO prizeDTO = new ActivityDetailDTO.PrizeDTO();
+                    prizeDTO.setPrizeId(apDO.getPrizeId());
+                    Optional<PrizeDO> optionalPrizeDO = prizeDOList.stream()
+                            .filter(prizeDO -> prizeDO.getId().equals(apDO.getPrizeId()))
+                            .findFirst();
+                    // 如果PrizeDO为空，不执行当前方法，不为空才执行
+                    optionalPrizeDO.ifPresent(prizeDO -> {
+                        prizeDTO.setName(prizeDO.getName());
+                        prizeDTO.setImageUrl(prizeDO.getImageUrl());
+                        prizeDTO.setPrice(prizeDO.getPrice());
+                        prizeDTO.setDescription(prizeDO.getDescription());
+                    });
+                    prizeDTO.setTiers(ActivityPrizeTiersEnum.forName(apDO.getPrizeTiers()));
+                    prizeDTO.setPrizeAmount(apDO.getPrizeAmount());
+                    prizeDTO.setStatus(ActivityPrizeStatusEnum.forName(apDO.getStatus()));
+                    return prizeDTO;
+                }).collect(Collectors.toList());
+        detailDTO.setPrizeDTOList(prizeDTOList);
+
+        List<ActivityDetailDTO.UserDTO> userDTOList = activityUserDOList.stream()
+                .map(auDO -> {
+                    ActivityDetailDTO.UserDTO userDTO = new ActivityDetailDTO.UserDTO();
+                    userDTO.setUserId(auDO.getUserId());
+                    userDTO.setUserName(auDO.getUserName());
+                    userDTO.setStatus(ActivityUserStatusEnum.forName(auDO.getStatus()));
+                    return userDTO;
+                }).collect(Collectors.toList());
+        detailDTO.setUserDTOList(userDTOList);
+        return detailDTO;
+    }
     @Override
     public PageListDTO<ActivityDTO> findActivityList(PageParam param) {
         // 获取总量
@@ -210,30 +349,6 @@ public class ActivityServiceImpl implements ActivityService {
     }
 
     /**
-     * 缓存完整的活动信息 ActivityDetailDTO
-     *
-     * @param detailDTO
-     */
-    private void cacheActivity(ActivityDetailDTO detailDTO) {
-        // key: ACTIVITY_12
-        // value: ActivityDetailDTO(json)
-        if (null == detailDTO || null == detailDTO.getActivityId()) {
-            log.warn("要缓存的活动信息不存在!");
-            return;
-        }
-
-        try {
-            redisUtil.set(ACTIVITY_PREFIX + detailDTO.getActivityId(),
-                    JacksonUtil.writeValueAsString(detailDTO),
-                    ACTIVITY_TIMEOUT);
-        } catch (Exception e) {
-            log.error("缓存活动异常，ActivityDetailDTO={}",
-                    JacksonUtil.writeValueAsString(detailDTO),
-                    e);
-        }
-    }
-
-    /**
      * 根据活动id从缓存中获取活动详细信息
      *
      * @param activityId
@@ -258,121 +373,7 @@ public class ActivityServiceImpl implements ActivityService {
 
     }
 
-    /**
-     * 根据基本DO整合完整的活动信息ActivityDetailDTO
-     *
-     * @param activityDO
-     * @param activityUserDOList
-     * @param prizeDOList
-     * @param activityPrizeDOList
-     * @return
-     */
-    private ActivityDetailDTO convertToActivityDetailDTO(ActivityDO activityDO,
-                                                         List<ActivityUserDO> activityUserDOList,
-                                                         List<PrizeDO> prizeDOList,
-                                                         List<ActivityPrizeDO> activityPrizeDOList) {
-        ActivityDetailDTO detailDTO = new ActivityDetailDTO();
-        detailDTO.setActivityId(activityDO.getId());
-        detailDTO.setActivityName(activityDO.getActivityName());
-        detailDTO.setDesc(activityDO.getDescription());
-        detailDTO.setStatus(ActivityStatusEnum.forName(activityDO.getStatus()));
 
-        // apDO: {prizeId，amount, status}, {prizeId，amount, status}
-        // pDO: {prizeid, name....},{prizeid, name....},{prizeid, name....}
-        List<ActivityDetailDTO.PrizeDTO> prizeDTOList = activityPrizeDOList
-                .stream()
-                .map(apDO -> {
-                    ActivityDetailDTO.PrizeDTO prizeDTO = new ActivityDetailDTO.PrizeDTO();
-                    prizeDTO.setPrizeId(apDO.getPrizeId());
-                    Optional<PrizeDO> optionalPrizeDO = prizeDOList.stream()
-                            .filter(prizeDO -> prizeDO.getId().equals(apDO.getPrizeId()))
-                            .findFirst();
-                    // 如果PrizeDO为空，不执行当前方法，不为空才执行
-                    optionalPrizeDO.ifPresent(prizeDO -> {
-                        prizeDTO.setName(prizeDO.getName());
-                        prizeDTO.setImageUrl(prizeDO.getImageUrl());
-                        prizeDTO.setPrice(prizeDO.getPrice());
-                        prizeDTO.setDescription(prizeDO.getDescription());
-                    });
-                    prizeDTO.setTiers(ActivityPrizeTiersEnum.forName(apDO.getPrizeTiers()));
-                    prizeDTO.setPrizeAmount(apDO.getPrizeAmount());
-                    prizeDTO.setStatus(ActivityPrizeStatusEnum.forName(apDO.getStatus()));
-                    return prizeDTO;
-                }).collect(Collectors.toList());
-        detailDTO.setPrizeDTOList(prizeDTOList);
 
-        List<ActivityDetailDTO.UserDTO> userDTOList = activityUserDOList.stream()
-                .map(auDO -> {
-                    ActivityDetailDTO.UserDTO userDTO = new ActivityDetailDTO.UserDTO();
-                    userDTO.setUserId(auDO.getUserId());
-                    userDTO.setUserName(auDO.getUserName());
-                    userDTO.setStatus(ActivityUserStatusEnum.forName(auDO.getStatus()));
-                    return userDTO;
-                }).collect(Collectors.toList());
-        detailDTO.setUserDTOList(userDTOList);
-        return detailDTO;
-    }
 
-    /**
-     * 校验活动有效性
-     *
-     * @param param
-     */
-    private void checkActivityInfo(CreateActivityParam param) {
-        if (null == param) {
-            throw new ServiceException(ServiceErrorCodeConstants.CREATE_ACTIVITY_INFO_IS_EMPTY);
-        }
-
-        // 人员id在人员表中是否存在
-        // 1 2 3  ->  1 2
-        List<Long> userIds = param.getActivityUserList()
-                .stream()
-                .map(CreateUserByActivityParam::getUserId)
-                .distinct()
-                .collect(Collectors.toList());
-        List<Long> existUserIds = userMapper.selectExistByIds(userIds);
-        if (CollectionUtils.isEmpty(existUserIds)) {
-            throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_USER_ERROR);
-        }
-        userIds.forEach(id -> {
-            if (!existUserIds.contains(id)) {
-                throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_USER_ERROR);
-            }
-        });
-
-        // 奖品id在奖品表中是否存在
-        List<Long> prizeIds = param.getActivityPrizeList()
-                .stream()
-                .map(CreatePrizeByActivityParam::getPrizeId)
-                .distinct()
-                .collect(Collectors.toList());
-        List<Long> existPrizeIds = prizeMapper.selectExistByIds(prizeIds);
-        if (CollectionUtils.isEmpty(existPrizeIds)) {
-            throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_PRIZE_ERROR);
-        }
-        prizeIds.forEach(id -> {
-            if (!existPrizeIds.contains(id)) {
-                throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_PRIZE_ERROR);
-            }
-        });
-
-        // 人员数量大于等于奖品数量
-        // 2个奖品 2 1
-        int userAmount = param.getActivityUserList().size();
-        long prizeAmount = param.getActivityPrizeList()
-                .stream()
-                .mapToLong(CreatePrizeByActivityParam::getPrizeAmount) // 2 1
-                .sum();
-        if (userAmount < prizeAmount) {
-            throw new ServiceException(ServiceErrorCodeConstants.USER_PRIZE_AMOUNT_ERROR);
-        }
-
-        // 校验活动奖品等奖有效性
-        param.getActivityPrizeList().forEach(prize -> {
-            if (null == ActivityPrizeTiersEnum.forName(prize.getPrizeTiers())) {
-                throw new ServiceException(ServiceErrorCodeConstants.ACTIVITY_PRIZE_TIERS_ERROR);
-            }
-        });
-
-    }
 }

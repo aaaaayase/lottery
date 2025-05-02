@@ -76,6 +76,7 @@ public class MqReceiver {
             // 2、param：最后一个奖项-》
             //      处理param1：活动完成、奖品完成
             //      处理param2: 回滚活动、奖品状态
+            // 这里的校验用于保证幂等性
             if (!drawPrizeService.checkDrawPrizeParam(param)) {
                 return;
             }
@@ -106,6 +107,123 @@ public class MqReceiver {
             throw e;
         }
 
+    }
+
+    /**
+     * 状态扭转
+     *
+     * @param param
+     */
+    private void statusConvert(DrawPrizeParam param) {
+        ConvertActivityStatusDTO convertActivityStatusDTO = new ConvertActivityStatusDTO();
+        convertActivityStatusDTO.setActivityId(param.getActivityId());
+        convertActivityStatusDTO.setTargetActivityStatus(ActivityStatusEnum.COMPLETED);
+        convertActivityStatusDTO.setPrizeId(param.getPrizeId());
+        convertActivityStatusDTO.setTargetPrizeStatus(ActivityPrizeStatusEnum.COMPLETED);
+        convertActivityStatusDTO.setUserIds(
+                param.getWinnerList().stream()
+                        .map(DrawPrizeParam.Winner::getUserId)
+                        .collect(Collectors.toList())
+        );
+        convertActivityStatusDTO.setTargetUserStatus(ActivityUserStatusEnum.COMPLETED);
+        activityStatusManager.handlerEvent(convertActivityStatusDTO);
+    }
+
+//    private void statusConvert(DrawPrizeParam param) {
+//
+//        // 问题：
+//        // 1、活动状态扭转有依赖性，导致代码维护性差
+//        // 2、状态扭转条件可能会扩展，当前写法，扩展性差，维护性差
+//        // 3、代码的灵活性、扩展性、维护性极差
+//        // 解决方案：设计模式（责任链设计模式、策略模式）
+//
+//
+//        // 活动: RUNNING-->COMPLETED ??  全部奖品抽完之后才改变状态
+//        // 奖品：INIT-->COMPLETED
+//        // 人员列表: INIT-->COMPLETED
+//
+//        // 1 扭转奖品状态
+//        // 查询活动关联的奖品信息
+//        // 条件判断是否符合扭转奖品状态：判断当前状态是否 不是COMPLETED，如果不是，要扭转
+//        // 才去扭转
+//
+//        // 2 扭转人员状态
+//        // 查询活动关联的人员信息
+//        // 条件判断是否符合扭转人员状态：判断当前状态是否 不是COMPLETED，如果不是，要扭转
+//        // 才去扭转
+//
+//        // 4、扭转xxx状态
+//
+//        // 3 扭转活动状态（必须再扭转奖品状态之后完成）
+//        // 查询活动信息
+//        // 条件判断是否符合扭转活动状态：才改变状态
+//        //      判断当前状态是否 不是COMPLETED，如果不是，
+//        //      且全部奖品抽完之后，
+//        //      （且xxx状态扭转）
+//        // 才去扭转
+//
+//
+//        // 4 更新活动完整信息缓存
+//
+//    }
+
+    /**
+     * 并发处理抽奖后续流程
+     *
+     * @param winningRecordDOList
+     */
+    private void syncExecute(List<WinningRecordDO> winningRecordDOList) {
+        // 通过线程池 threadPoolTaskExecutor
+        // 扩展：加入策略模式或者其他设计模式来完成后续的异步操作
+        // 短信通知
+        threadPoolTaskExecutor.execute(() -> sendMessage(winningRecordDOList));
+        // 邮件通知
+        threadPoolTaskExecutor.execute(() -> sendMail(winningRecordDOList));
+    }
+
+    /**
+     * 发邮件
+     *
+     * @param winningRecordDOList
+     */
+    private void sendMail(List<WinningRecordDO> winningRecordDOList) {
+        if (CollectionUtils.isEmpty(winningRecordDOList)) {
+            log.info("中奖列表为空，不用发邮件！");
+            return;
+        }
+        for (WinningRecordDO winningRecordDO : winningRecordDOList) {
+            // Hi,胡一博。恭喜你在抽奖活动活动中获得二等奖:吹风机。获奖奖时间为18:18:44,请尽快领取您的奖励
+            String context = "Hi，" + winningRecordDO.getWinnerName() + "。恭喜你在"
+                    + winningRecordDO.getActivityName() + "活动中获得"
+                    + ActivityPrizeTiersEnum.forName(winningRecordDO.getPrizeTier()).getMessage()
+                    + "：" + winningRecordDO.getPrizeName() + "。获奖时间为"
+                    + DateUtil.formatTime(winningRecordDO.getWinningTime()) + "，请尽快领 取您的奖励！";
+            mailUtil.sendSampleMail(winningRecordDO.getWinnerEmail(),
+                    "中奖通知", context);
+        }
+    }
+
+    /**
+     * 发短信
+     *
+     * @param winningRecordDOList
+     */
+    private void sendMessage(List<WinningRecordDO> winningRecordDOList) {
+        if (CollectionUtils.isEmpty(winningRecordDOList)) {
+            log.info("中奖列表为空，不用发短信！");
+            return;
+        }
+        for (WinningRecordDO winningRecordDO : winningRecordDOList) {
+            Map<String, String> map = new HashMap<>();
+            map.put("name", winningRecordDO.getWinnerName());
+            map.put("activityName", winningRecordDO.getActivityName());
+            map.put("prizeTiers", ActivityPrizeTiersEnum.forName(winningRecordDO.getPrizeTier()).getMessage());
+            map.put("prizeName", winningRecordDO.getPrizeName());
+            map.put("winningTime", DateUtil.formatTime(winningRecordDO.getWinningTime()));
+            smsUtil.sendMessage("SMS_465985911",
+                    winningRecordDO.getWinnerPhoneNumber().getValue(),
+                    JacksonUtil.writeValueAsString(map));
+        }
     }
 
     /**
@@ -185,122 +303,5 @@ public class MqReceiver {
                 .equalsIgnoreCase(ActivityPrizeStatusEnum.COMPLETED.name());
 
     }
-
-    /**
-     * 并发处理抽奖后续流程
-     *
-     * @param winningRecordDOList
-     */
-    private void syncExecute(List<WinningRecordDO> winningRecordDOList) {
-        // 通过线程池 threadPoolTaskExecutor
-        // 扩展：加入策略模式或者其他设计模式来完成后续的异步操作
-        // 短信通知
-        threadPoolTaskExecutor.execute(() -> sendMessage(winningRecordDOList));
-        // 邮件通知
-        threadPoolTaskExecutor.execute(() -> sendMail(winningRecordDOList));
-    }
-
-    /**
-     * 发邮件
-     *
-     * @param winningRecordDOList
-     */
-    private void sendMail(List<WinningRecordDO> winningRecordDOList) {
-        if (CollectionUtils.isEmpty(winningRecordDOList)) {
-            log.info("中奖列表为空，不用发邮件！");
-            return;
-        }
-        for (WinningRecordDO winningRecordDO : winningRecordDOList) {
-            // Hi,胡一博。恭喜你在抽奖活动活动中获得二等奖:吹风机。获奖奖时间为18:18:44,请尽快领取您的奖励
-            String context = "Hi，" + winningRecordDO.getWinnerName() + "。恭喜你在"
-                    + winningRecordDO.getActivityName() + "活动中获得"
-                    + ActivityPrizeTiersEnum.forName(winningRecordDO.getPrizeTier()).getMessage()
-                    + "：" + winningRecordDO.getPrizeName() + "。获奖时间为"
-                    + DateUtil.formatTime(winningRecordDO.getWinningTime()) + "，请尽快领 取您的奖励！";
-            mailUtil.sendSampleMail(winningRecordDO.getWinnerEmail(),
-                    "中奖通知", context);
-        }
-    }
-
-    /**
-     * 发短信
-     *
-     * @param winningRecordDOList
-     */
-    private void sendMessage(List<WinningRecordDO> winningRecordDOList) {
-        if (CollectionUtils.isEmpty(winningRecordDOList)) {
-            log.info("中奖列表为空，不用发短信！");
-            return;
-        }
-        for (WinningRecordDO winningRecordDO : winningRecordDOList) {
-            Map<String, String> map = new HashMap<>();
-            map.put("name", winningRecordDO.getWinnerName());
-            map.put("activityName", winningRecordDO.getActivityName());
-            map.put("prizeTiers", ActivityPrizeTiersEnum.forName(winningRecordDO.getPrizeTier()).getMessage());
-            map.put("prizeName", winningRecordDO.getPrizeName());
-            map.put("winningTime", DateUtil.formatTime(winningRecordDO.getWinningTime()));
-            smsUtil.sendMessage("SMS_465985911",
-                    winningRecordDO.getWinnerPhoneNumber().getValue(),
-                    JacksonUtil.writeValueAsString(map));
-        }
-    }
-
-    /**
-     * 状态扭转
-     *
-     * @param param
-     */
-    private void statusConvert(DrawPrizeParam param) {
-        ConvertActivityStatusDTO convertActivityStatusDTO = new ConvertActivityStatusDTO();
-        convertActivityStatusDTO.setActivityId(param.getActivityId());
-        convertActivityStatusDTO.setTargetActivityStatus(ActivityStatusEnum.COMPLETED);
-        convertActivityStatusDTO.setPrizeId(param.getPrizeId());
-        convertActivityStatusDTO.setTargetPrizeStatus(ActivityPrizeStatusEnum.COMPLETED);
-        convertActivityStatusDTO.setUserIds(
-                param.getWinnerList().stream()
-                        .map(DrawPrizeParam.Winner::getUserId)
-                        .collect(Collectors.toList())
-        );
-        convertActivityStatusDTO.setTargetUserStatus(ActivityUserStatusEnum.COMPLETED);
-        activityStatusManager.handlerEvent(convertActivityStatusDTO);
-    }
-
-//    private void statusConvert(DrawPrizeParam param) {
-//
-//        // 问题：
-//        // 1、活动状态扭转有依赖性，导致代码维护性差
-//        // 2、状态扭转条件可能会扩展，当前写法，扩展性差，维护性差
-//        // 3、代码的灵活性、扩展性、维护性极差
-//        // 解决方案：设计模式（责任链设计模式、策略模式）
-//
-//
-//        // 活动: RUNNING-->COMPLETED ??  全部奖品抽完之后才改变状态
-//        // 奖品：INIT-->COMPLETED
-//        // 人员列表: INIT-->COMPLETED
-//
-//        // 1 扭转奖品状态
-//        // 查询活动关联的奖品信息
-//        // 条件判断是否符合扭转奖品状态：判断当前状态是否 不是COMPLETED，如果不是，要扭转
-//        // 才去扭转
-//
-//        // 2 扭转人员状态
-//        // 查询活动关联的人员信息
-//        // 条件判断是否符合扭转人员状态：判断当前状态是否 不是COMPLETED，如果不是，要扭转
-//        // 才去扭转
-//
-//        // 4、扭转xxx状态
-//
-//        // 3 扭转活动状态（必须再扭转奖品状态之后完成）
-//        // 查询活动信息
-//        // 条件判断是否符合扭转活动状态：才改变状态
-//        //      判断当前状态是否 不是COMPLETED，如果不是，
-//        //      且全部奖品抽完之后，
-//        //      （且xxx状态扭转）
-//        // 才去扭转
-//
-//
-//        // 4 更新活动完整信息缓存
-//
-//    }
 
 }
